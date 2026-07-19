@@ -38,6 +38,15 @@ jobs:
       - name: 'Generate commit metadata'
         run: 'npm run generate'
 
+      - name: 'Build core'
+        run: 'npm run build --workspace @google/gemini-cli-core'
+
+      - name: 'Install sandbox dependencies'
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
       - name: 'Typecheck core'
         run: 'npm run typecheck --workspace @google/gemini-cli-core'
 
@@ -46,6 +55,3 @@ jobs:
 
       - name: 'Test core'
         run: 'npm run test:ci --workspace @google/gemini-cli-core'
-
-      - name: 'Build core'
-        run: 'npm run build --workspace @google/gemini-cli-core'
