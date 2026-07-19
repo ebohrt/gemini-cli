@@ -17,6 +17,7 @@ import {
 
 const mockPlatform = vi.hoisted(() => vi.fn());
 const mockHomedir = vi.hoisted(() => vi.fn());
+const mockTmpdir = vi.hoisted(() => vi.fn());
 
 const mockShellExecutionService = vi.hoisted(() => vi.fn());
 const mockShellBackground = vi.hoisted(() => vi.fn());
@@ -36,9 +37,11 @@ vi.mock('node:os', async (importOriginal) => {
       ...actualOs,
       platform: mockPlatform,
       homedir: mockHomedir,
+      tmpdir: mockTmpdir,
     },
     platform: mockPlatform,
     homedir: mockHomedir,
+    tmpdir: mockTmpdir,
   };
 });
 vi.mock('crypto');
@@ -100,6 +103,7 @@ describe('ShellTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockTmpdir.mockReturnValue(process.env['TEMP'] ?? '.');
     tempRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-test-'));
     fs.mkdirSync(path.join(tempRootDir, 'subdir'));
 
@@ -301,7 +305,7 @@ describe('ShellTool', () => {
 
       const result = await promise;
 
-      const wrappedCommand = `(\n${'my-command &'}\n); __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const wrappedCommand = `(\n${'my-command &'}\n); __code=$?; pgrep -g 0 >'${tmpFile}' 2>&1; exit $__code;`;
       expect(mockShellExecutionService).toHaveBeenCalledWith(
         wrappedCommand,
         tempRootDir,
@@ -319,6 +323,28 @@ describe('ShellTool', () => {
       expect(fs.existsSync(tmpFile)).toBe(false);
     });
 
+    it('should shell-escape the pgrep output path', async () => {
+      const tmpDir = path.join(tempRootDir, "tmp dir'with;metacharacters");
+      mockTmpdir.mockReturnValue(tmpDir);
+
+      const invocation = shellTool.build({ command: 'my-command' });
+      const promise = invocation.execute(mockAbortSignal);
+      resolveShellExecution();
+      await promise;
+
+      const tmpFile = path.join(tmpDir, 'shell_pgrep_abcdef.tmp');
+      const escapedTmpFile = `'${tmpFile.replaceAll("'", "'\\''")}'`;
+      const wrappedCommand = `(\nmy-command\n); __code=$?; pgrep -g 0 >${escapedTmpFile} 2>&1; exit $__code;`;
+      expect(mockShellExecutionService).toHaveBeenCalledWith(
+        wrappedCommand,
+        tempRootDir,
+        expect.any(Function),
+        expect.any(AbortSignal),
+        false,
+        expect.any(Object),
+      );
+    });
+
     it('should add a space when command ends with a backslash to prevent escaping newline', async () => {
       const invocation = shellTool.build({ command: 'ls\\' });
       const promise = invocation.execute(mockAbortSignal);
@@ -326,7 +352,7 @@ describe('ShellTool', () => {
       await promise;
 
       const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
-      const wrappedCommand = `(\nls\\ \n); __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const wrappedCommand = `(\nls\\ \n); __code=$?; pgrep -g 0 >'${tmpFile}' 2>&1; exit $__code;`;
       expect(mockShellExecutionService).toHaveBeenCalledWith(
         wrappedCommand,
         tempRootDir,
@@ -344,7 +370,7 @@ describe('ShellTool', () => {
       await promise;
 
       const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
-      const wrappedCommand = `(\nls # comment\n); __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const wrappedCommand = `(\nls # comment\n); __code=$?; pgrep -g 0 >'${tmpFile}' 2>&1; exit $__code;`;
       expect(mockShellExecutionService).toHaveBeenCalledWith(
         wrappedCommand,
         tempRootDir,
@@ -366,7 +392,7 @@ describe('ShellTool', () => {
       await promise;
 
       const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
-      const wrappedCommand = `(\n${'ls'}\n); __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const wrappedCommand = `(\n${'ls'}\n); __code=$?; pgrep -g 0 >'${tmpFile}' 2>&1; exit $__code;`;
       expect(mockShellExecutionService).toHaveBeenCalledWith(
         wrappedCommand,
         subdir,
@@ -391,7 +417,7 @@ describe('ShellTool', () => {
       await promise;
 
       const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
-      const wrappedCommand = `(\n${'ls'}\n); __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const wrappedCommand = `(\n${'ls'}\n); __code=$?; pgrep -g 0 >'${tmpFile}' 2>&1; exit $__code;`;
       expect(mockShellExecutionService).toHaveBeenCalledWith(
         wrappedCommand,
         path.join(tempRootDir, 'subdir'),
